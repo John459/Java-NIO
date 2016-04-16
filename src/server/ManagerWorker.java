@@ -10,13 +10,12 @@ import java.util.Queue;
  */
 public class ManagerWorker extends AbstractWorker {
 
-    //the queue of events that this worker needs to process
-    private final Queue<ServerDataEvent> eventQueue = new LinkedList<>();
     //the list of workers which are managed by this manager
     private List<AbstractWorker> workers = new LinkedList<>();
+    private static final int NUM_THREADS = 1;
 
     public ManagerWorker() {
-        super("manager");
+        super("manager", 1);
     }
 
     public void addWorker(AbstractWorker worker) {
@@ -26,16 +25,9 @@ public class ManagerWorker extends AbstractWorker {
         workers.add(worker);
     }
 
-    public void addEvent(ServerDataEvent event) {
-        synchronized (eventQueue) {
-            eventQueue.add(event);
-            eventQueue.notify(); //tell our worker that there is an event for it to process
-        }
-    }
-
     private void callWorkers(String command, ServerDataEvent event) {
         //for all workers whose function is equal to the command passed,
-        //add the corresponding event to that worker's event queue.
+        //add the corresponding event to that worker's event eventQueue.
         for (AbstractWorker worker : workers) {
             if (!worker.WORKER_FUNCTION.equalsIgnoreCase(command)) {
                 continue;
@@ -64,23 +56,10 @@ public class ManagerWorker extends AbstractWorker {
         callWorkers(command, managedEvent);
     }
 
-    public void run() {
-        while (true) {
-            ServerDataEvent event;
-            synchronized (eventQueue) {
-                while (eventQueue.isEmpty()) {
-                    try {
-                        eventQueue.wait(); //wait until we're notified that an event is available
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-                event = eventQueue.poll();
-            }
-            //process the passed event.
-            //Note: Manager Workers never respond to the server.
-            //that is the job of the workers that it manages.
-            this.processEvent(event);
-        }
+    public void parseEvent(ServerDataEvent event) {
+        //process the passed event.
+        //Note: Manager Workers never respond to the server.
+        //that is the job of the workers that it manages.
+        this.processEvent(event);
     }
 }

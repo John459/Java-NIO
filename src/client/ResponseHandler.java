@@ -21,7 +21,7 @@ public class ResponseHandler {
         this.response = response;
         if (synchronous) {
             //if we want to handle responses synchronously, we notify ourselves that a response is ready.
-            this.notify();
+            this.notifyAll();
         } else {
             //if we want to handle responses asynchronously, we handle this response immediately.
             actOnResponse();

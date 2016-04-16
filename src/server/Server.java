@@ -26,7 +26,7 @@ public class Server implements Runnable {
     private ByteBuffer readBuffer = ByteBuffer.allocate(8192);
     //the list of change requests to be processed by the server
     private final List<ChangeRequest> changeRequests = new LinkedList<>();
-    //a map which maps each channel to its queue of pending data that needs to be processed
+    //a map which maps each channel to its eventQueue of pending data that needs to be processed
     private final Map<SocketChannel, Queue<ByteBuffer>> pendingData = new HashMap<>();
 
     public Server(InetAddress host, int port, ManagerWorker managerWorker) throws IOException {
@@ -77,7 +77,7 @@ public class Server implements Runnable {
             //get the data associated with this channel
             Queue<ByteBuffer> dataQueue = this.pendingData.get(socketChannel);
 
-            //write until our queue is empty
+            //write until our eventQueue is empty
             while (!dataQueue.isEmpty()) {
                 ByteBuffer buffer = dataQueue.peek();
                 socketChannel.write(buffer);
@@ -184,6 +184,7 @@ public class Server implements Runnable {
             managerWorker.addWorker(new EchoWorker());
             //tell the managerWorker to manage a counter worker
             managerWorker.addWorker(new CounterWorker());
+            managerWorker.addWorker(new ConcurrentLockedQueueWorker());
 
             //run the managerWorker on a new thread
             new Thread(managerWorker).start();

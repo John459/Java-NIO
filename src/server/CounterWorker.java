@@ -11,19 +11,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class CounterWorker extends AbstractWorker {
 
-    //the queue of events that this worker needs to process
-    private final Queue<ServerDataEvent> eventQueue = new LinkedList<>();
     private AtomicInteger counter = new AtomicInteger(0);
+    private static final int NUM_THREADS = 2;
 
     public CounterWorker() {
-        super("count");
-    }
-
-    public void addEvent(ServerDataEvent e) {
-        synchronized (eventQueue) {
-            eventQueue.add(e);
-            eventQueue.notify(); //tell our worker that there is an event for it to process
-        }
+        super("count", NUM_THREADS);
     }
 
     private void processData(ServerDataEvent event) {
@@ -53,7 +45,7 @@ public class CounterWorker extends AbstractWorker {
         }
         //check if the counter's value is equal to some specified value.
         //if it is, respond with that value.
-        //if not, add this event to the queue again and check later.
+        //if not, add this event to the eventQueue again and check later.
         if (data.startsWith("check")) {
             try {
                 int value = Integer.parseInt(data.split(" ")[1]);
@@ -93,24 +85,12 @@ public class CounterWorker extends AbstractWorker {
     }
 
 
-    public void run() {
-        while (true) {
-            ServerDataEvent event;
-            synchronized (eventQueue) {
-                while (eventQueue.isEmpty()) {
-                    try {
-                        eventQueue.wait(); //wait until we're notified that an event is available
-                    } catch (InterruptedException e) {}
-                }
-                event = eventQueue.poll();
-            }
-            //if the data needs processing, then process the data
-            if (event.processEvent()) {
-                processData(event);
-            //if not, tell the server that we'd like to send our data
-            } else {
-                event.getServer().send(event.getSocket(), event.getData());
-            }
+    public void parseEvent(ServerDataEvent event) {
+        if (event.processEvent()) {
+            processData(event);
+        //if not, tell the server that we'd like to send our data
+        } else {
+            event.getServer().send(event.getSocket(), event.getData());
         }
     }
 

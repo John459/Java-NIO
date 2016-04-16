@@ -202,6 +202,55 @@ public class Client implements Runnable {
         }
     }
 
+    private static void count(Client client) throws IOException {
+        //a response handler which will process responses synchronously
+        ResponseHandler synchronousResponseHandler = new ResponseHandler(true);
+        //a response handler which will process responses asynchronously
+        ResponseHandler asynchronousResponseHandler = new ResponseHandler(false);
+        //client.send("echo: hi".getBytes(), synchronousResponseHandler);
+        //synchronousResponseHandler.waitForResponse();
+
+        //tell the server to reset the counter.
+        //do this synchronously because we don't want to start counting until we know the counter is at 0.
+        client.send("count: reset".getBytes(), synchronousResponseHandler);
+        synchronousResponseHandler.waitForResponse();
+
+
+        for (int i = 0; i < 1000; i++) {
+            //send an message telling the server to increment the counter 1000 times.
+            //wait for the response asynchronously.
+            client.send(("count: 1000").getBytes(), asynchronousResponseHandler);
+        }
+
+        //tell the server to respond once the counter has hit 1000000.
+        //do this synchronously because we do not want to proceed until the counting is done.
+        client.send("count: check 1000000".getBytes(), synchronousResponseHandler);
+        synchronousResponseHandler.waitForResponse();
+
+        //At this point we know we've counted to 1000000
+
+        //tell the server to echo back our message.
+        //do this synchronously because we don't want to exit until the message has been received.
+        client.send("echo: Counting completed successfully".getBytes(), synchronousResponseHandler);
+        synchronousResponseHandler.waitForResponse();
+    }
+
+    private static void concurrentQueue(Client client) throws IOException {
+        ResponseHandler synchronousResponseHandler = new ResponseHandler(true);
+        ResponseHandler asynchronousResponseHandler = new ResponseHandler(false);
+
+        client.send("clq: clear".getBytes(), synchronousResponseHandler);
+        synchronousResponseHandler.waitForResponse();
+
+        for (int i = 0; i < 5; i++) {
+            client.send(("clq: enq " + i).getBytes(), asynchronousResponseHandler);
+        }
+        client.send("clq: checklen 5".getBytes(), synchronousResponseHandler);
+        synchronousResponseHandler.waitForResponse();
+        client.send("clq: print".getBytes(), synchronousResponseHandler);
+        synchronousResponseHandler.waitForResponse();
+    }
+
     public static void main(String[] args) {
         try {
             //create a new client, whose channels will connect to localhost:9090
@@ -210,34 +259,7 @@ public class Client implements Runnable {
             t.setDaemon(true);
             t.start();
 
-            //a response handler which will process responses synchronously
-            ResponseHandler synchronousResponseHandler = new ResponseHandler(true);
-            //a response handler which will process responses asynchronously
-            ResponseHandler asynchronousResponseHandler = new ResponseHandler(false);
-
-            //tell the server to reset the counter.
-            //do this synchronously because we don't want to start counting until we know the counter is at 0.
-            client.send("count: reset".getBytes(), synchronousResponseHandler);
-            synchronousResponseHandler.waitForResponse();
-
-
-            for (int i = 0; i < 1000; i++) {
-                //send an message telling the server to increment the counter 1000 times.
-                //wait for the response asynchronously.
-                client.send(("count: 1000").getBytes(), asynchronousResponseHandler);
-            }
-
-            //tell the server to respond once the counter has hit 1000000.
-            //do this synchronously because we do not want to proceed until the counting is done.
-            client.send("count: check 1000000".getBytes(), synchronousResponseHandler);
-            synchronousResponseHandler.waitForResponse();
-
-            //At this point we know we've counted to 1000000
-
-            //tell the server to echo back our message.
-            //do this synchronously because we don't want to exit until the message has been received.
-            client.send("echo: Counting completed successfully".getBytes(), synchronousResponseHandler);
-            synchronousResponseHandler.waitForResponse();
+            concurrentQueue(client);
         } catch (IOException e) {
             e.printStackTrace();
         }
