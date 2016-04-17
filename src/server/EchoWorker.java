@@ -6,7 +6,7 @@ package server;
  */
 public class EchoWorker extends AbstractWorker {
 
-    private static final int NUM_THREADS = 2;
+    private static final int NUM_THREADS = 1;
 
     public EchoWorker() {
         super("echo", NUM_THREADS);

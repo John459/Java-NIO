@@ -1,20 +1,21 @@
 package server;
 
-import datastructures.ConcurrentLockQueue;
+import datastructures.ConcurrentCASQueue;
 
 import java.nio.channels.SocketChannel;
 
 /**
- * Created by john on 4/15/2016.
+ * Created by john on 4/16/2016.
  */
-public class ConcurrentLockedQueueWorker extends AbstractWorker {
+public class ConcurrentCASQueueWorker extends AbstractWorker {
 
     private static final int NUM_THREADS = 5;
-    private ConcurrentLockQueue<Integer> concurrentQueue;
+    //lock free queue
+    private ConcurrentCASQueue<Integer> concurrentQueue;
 
-    public ConcurrentLockedQueueWorker() {
-        super("clq", NUM_THREADS);
-        this.concurrentQueue = new ConcurrentLockQueue<>();
+    public ConcurrentCASQueueWorker() {
+        super("ccq", NUM_THREADS);
+        this.concurrentQueue = new ConcurrentCASQueue<>();
     }
 
     private void processData(ServerDataEvent event) {
@@ -28,7 +29,7 @@ public class ConcurrentLockedQueueWorker extends AbstractWorker {
         String data = new String(event.getData());
 
         if (data.equalsIgnoreCase("clear")) {
-            this.concurrentQueue = new ConcurrentLockQueue<>();
+            this.concurrentQueue = new ConcurrentCASQueue<>();
             this.addEvent(new ServerDataEvent(server, socket, ("cleared queue").getBytes(), false));
         }
 

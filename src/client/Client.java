@@ -1,6 +1,10 @@
 package client;
 
+import client.examples.QueueExample;
+import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
+
 import java.io.IOException;
+import java.net.BindException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -21,9 +25,9 @@ public class Client implements Runnable {
     private Selector selector; //selects which channels to process
     private ByteBuffer readBuffer = ByteBuffer.allocate(8192); //what we will read into
     //the list of change requests that the client needs to perform
-    private final List<ChangeRequest> changeRequests = new LinkedList<>();
+    private final List<ChangeRequest> changeRequests = Collections.synchronizedList(new LinkedList<>());
     //data which is waiting to be sent to the server
-    private final Map<SocketChannel, Queue<ByteBuffer>> pendingData = new HashMap<>();
+    private final Map<SocketChannel, Queue<ByteBuffer>> pendingData = Collections.synchronizedMap(new HashMap<>());
     //a map which maps each channel to a corresponding response handler to handle that channel's responses
     private final Map<SocketChannel, ResponseHandler> responseHandlers = Collections.synchronizedMap(new HashMap<>());
 
@@ -53,7 +57,7 @@ public class Client implements Runnable {
         return socketChannel;
     }
 
-    private void finishConnection(SelectionKey key) {
+    private void finishConnection(SelectionKey key) throws IOException {
         //get the channel associated with this key
         SocketChannel socketChannel  = (SocketChannel) key.channel();
 
@@ -61,6 +65,7 @@ public class Client implements Runnable {
             //finishing connecting the channel
             socketChannel.finishConnect();
         } catch (IOException e) {
+            e.printStackTrace();
             key.cancel();
             return;
         }
@@ -83,8 +88,7 @@ public class Client implements Runnable {
         }
     }
 
-    public void send(byte[] data, ResponseHandler handler) throws IOException {
-        //create a new connection to send the data on
+    private void send(byte[] data, ResponseHandler handler) throws IOException {
         SocketChannel socketChannel = this.initConnection();
 
         //create a new mapping between this new channel and the response handler
@@ -101,12 +105,35 @@ public class Client implements Runnable {
         }
 
         //tell the selector that work is available
+        //synchronized (selector) {
+        this.selector.wakeup();
+        //}
+    }
+
+    public void send(final String IDENTIFIER, String data, ResponseHandler handler) throws IOException {
+        //create a new connection to send the data on
+        SocketChannel socketChannel = this.initConnection();
+
+        //create a new mapping between this new channel and the response handler
+        this.responseHandlers.put(socketChannel, handler);
+
+        //add the data we'd like to write to the queue of pending data.
+        synchronized (this.pendingData) {
+            Queue<ByteBuffer> byteBufferQueue = this.pendingData.get(socketChannel);
+            if (byteBufferQueue == null) {
+                byteBufferQueue = new LinkedList<>();
+                this.pendingData.put(socketChannel, byteBufferQueue);
+            }
+            byte[] dataBytes = (IDENTIFIER + ": " + data).getBytes();
+            byteBufferQueue.add(ByteBuffer.wrap(dataBytes));
+        }
+
         this.selector.wakeup();
     }
 
     private void write(SelectionKey key) throws IOException {
         SocketChannel socketChannel = (SocketChannel) key.channel();
-
+        //System.out.println(socketChannel.isConnected());
         synchronized (this.pendingData) {
             Queue<ByteBuffer> dataQueue = this.pendingData.get(socketChannel);
             if (dataQueue == null) {
@@ -117,6 +144,7 @@ public class Client implements Runnable {
             while (!dataQueue.isEmpty()) {
                 ByteBuffer buffer = dataQueue.peek();
                 socketChannel.write(buffer);
+                //System.out.println("wrote: " + new String(buffer.array()));
                 if (buffer.remaining() > 0) {
                     //we'll write the rest on the next pass
                     break;
@@ -125,6 +153,7 @@ public class Client implements Runnable {
             }
 
             if (dataQueue.isEmpty()) {
+                this.pendingData.remove(socketChannel);
                 //tell the selector that this channel is now interested in reading.
                 key.interestOps(SelectionKey.OP_READ);
             }
@@ -140,6 +169,7 @@ public class Client implements Runnable {
         try {
             read = sChannel.read(this.readBuffer);
         } catch (IOException e) {
+            e.printStackTrace();
             key.cancel();
             sChannel.close();
             return;
@@ -203,65 +233,57 @@ public class Client implements Runnable {
     }
 
     private static void count(Client client) throws IOException {
-        //a response handler which will process responses synchronously
-        ResponseHandler synchronousResponseHandler = new ResponseHandler(true);
-        //a response handler which will process responses asynchronously
-        ResponseHandler asynchronousResponseHandler = new ResponseHandler(false);
+        ResponseHandler synchronousResponseHandler = new ResponseHandler(true) {
+            @Override
+            protected void actOnResponse() {
+                System.out.println(new String(this.response));
+            }
+        };
+        ResponseHandler asynchronousResponseHandler = new ResponseHandler(false) {
+            @Override
+            protected void actOnResponse() {
+                System.out.println(new String(this.response));
+            }
+        };
         //client.send("echo: hi".getBytes(), synchronousResponseHandler);
         //synchronousResponseHandler.waitForResponse();
 
         //tell the server to reset the counter.
         //do this synchronously because we don't want to start counting until we know the counter is at 0.
-        client.send("count: reset".getBytes(), synchronousResponseHandler);
+        client.send("count", "reset", synchronousResponseHandler);
+        //client.send("count: reset".getBytes(), synchronousResponseHandler);
         synchronousResponseHandler.waitForResponse();
 
 
         for (int i = 0; i < 1000; i++) {
             //send an message telling the server to increment the counter 1000 times.
             //wait for the response asynchronously.
-            client.send(("count: 1000").getBytes(), asynchronousResponseHandler);
+            client.send("count", 1000 + "", asynchronousResponseHandler);
+            //client.send(("count: 1000").getBytes(), asynchronousResponseHandler);
         }
 
         //tell the server to respond once the counter has hit 1000000.
         //do this synchronously because we do not want to proceed until the counting is done.
-        client.send("count: check 1000000".getBytes(), synchronousResponseHandler);
+        client.send("count", "check 1000000", synchronousResponseHandler);
+        //client.send("count: check 1000000".getBytes(), synchronousResponseHandler);
         synchronousResponseHandler.waitForResponse();
 
         //At this point we know we've counted to 1000000
 
         //tell the server to echo back our message.
         //do this synchronously because we don't want to exit until the message has been received.
-        client.send("echo: Counting completed successfully".getBytes(), synchronousResponseHandler);
+        client.send("echo", "Counting completed successfully", synchronousResponseHandler);
+        //client.send("echo: Counting completed successfully".getBytes(), synchronousResponseHandler);
         synchronousResponseHandler.waitForResponse();
     }
 
-    private static void concurrentQueue(Client client) throws IOException {
-        ResponseHandler synchronousResponseHandler = new ResponseHandler(true);
-        ResponseHandler asynchronousResponseHandler = new ResponseHandler(false);
+    public static Client createClient(InetAddress host, int port) throws IOException {
+        Client client = new Client(host, 9090);
+        Thread t = new Thread(client);
+        t.setDaemon(true);
+        t.start();
 
-        client.send("clq: clear".getBytes(), synchronousResponseHandler);
-        synchronousResponseHandler.waitForResponse();
-
-        for (int i = 0; i < 5; i++) {
-            client.send(("clq: enq " + i).getBytes(), asynchronousResponseHandler);
-        }
-        client.send("clq: checklen 5".getBytes(), synchronousResponseHandler);
-        synchronousResponseHandler.waitForResponse();
-        client.send("clq: print".getBytes(), synchronousResponseHandler);
-        synchronousResponseHandler.waitForResponse();
+        return client;
     }
 
-    public static void main(String[] args) {
-        try {
-            //create a new client, whose channels will connect to localhost:9090
-            Client client = new Client(InetAddress.getLocalHost(), 9090);
-            Thread t = new Thread(client);
-            t.setDaemon(true);
-            t.start();
-
-            concurrentQueue(client);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
 }

@@ -15,7 +15,7 @@ public class ManagerWorker extends AbstractWorker {
     private static final int NUM_THREADS = 1;
 
     public ManagerWorker() {
-        super("manager", 1);
+        super("manager", NUM_THREADS);
     }
 
     public void addWorker(AbstractWorker worker) {

@@ -16,7 +16,6 @@ public abstract class AbstractWorker implements Runnable {
     final Queue<ServerDataEvent> eventQueue;
     private ExecutorService executor;
 
-
     public AbstractWorker(final String WORKER_FUNCTION, final int NUM_THREADS) {
         this.WORKER_FUNCTION = WORKER_FUNCTION;
         this.executor = Executors.newFixedThreadPool(NUM_THREADS);
@@ -49,21 +48,13 @@ public abstract class AbstractWorker implements Runnable {
                 }
                 event = eventQueue.poll();
             }
-            ThreadPoolEvent threadPoolEvent = new ThreadPoolEvent(event);
-            executor.execute(threadPoolEvent);
-        }
-    }
-
-    public class ThreadPoolEvent implements Runnable {
-        private ServerDataEvent event;
-
-        public ThreadPoolEvent(ServerDataEvent event) {
-            this.event = event;
-        }
-
-        @Override
-        public void run() {
-            parseEvent(event);
+            final ServerDataEvent fEvent = event;
+            executor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    parseEvent(fEvent);
+                }
+            });
         }
     }
 

@@ -4,18 +4,16 @@ package client;
  * Created by john on 3/12/2016.
  * Handles both synchronous and asynchronous responses
  */
-public class ResponseHandler {
+public abstract class ResponseHandler {
 
-    private byte[] response = null;
+    protected byte[] response = null;
     private boolean synchronous;
 
     public ResponseHandler(boolean synchronous) {
         this.synchronous = synchronous;
     }
 
-    private void actOnResponse() {
-        System.out.println(new String(response));
-    }
+    protected abstract void actOnResponse();
 
     public synchronized boolean handleResponse(byte[] response) {
         this.response = response;

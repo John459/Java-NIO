@@ -1,24 +1,28 @@
-package server.datastructures;
+package datastructures;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Created by john on 4/15/2016.
  */
-public class UnboundedTotalQueue<T> {
+public class ConcurrentLockQueue<T> implements ConcurrentQueue<T> {
 
     private Node head;
     private Node tail;
     private ReentrantLock enqLock;
     private ReentrantLock deqLock;
+    private Condition deqCondition;
     private AtomicInteger length;
 
-    public UnboundedTotalQueue() {
+    public ConcurrentLockQueue() {
         this.head = new Node(null);
         this.tail = head;
         this.enqLock = new ReentrantLock();
         this.deqLock = new ReentrantLock();
+        this.deqCondition = this.deqLock.newCondition();
         this.length = new AtomicInteger(0);
     }
 
@@ -28,7 +32,14 @@ public class UnboundedTotalQueue<T> {
             Node node = new Node(value);
             tail.next = node;
             tail = node;
-            length.getAndIncrement();
+            if (length.getAndIncrement() == 0) {
+                deqLock.lock();
+                try {
+                    deqCondition.signalAll();
+                } finally {
+                    deqLock.unlock();
+                }
+            }
         } finally {
             enqLock.unlock();
         }
@@ -38,8 +49,11 @@ public class UnboundedTotalQueue<T> {
         T result;
         deqLock.lock();
         try {
-            if (head.next == null) {
-                throw new Exception("Can't deq from empty queue");
+            while (head.next == null) {
+                boolean signalReceived = deqCondition.await(10000, TimeUnit.MILLISECONDS);
+                if (!signalReceived) {
+                    throw new Exception("Cant dequeue from empty queue");
+                }
             }
             result = head.next.value;
             head = head.next;

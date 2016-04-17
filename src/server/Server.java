@@ -4,10 +4,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.*;
 
@@ -52,7 +49,7 @@ public class Server implements Runnable {
 
     public void send(SocketChannel socket, byte[] data) {
         synchronized (this.changeRequests) {
-            //tell the selector that our channel is interested i changing its operation to writing
+            //tell the selector that our channel is interested in changing its operation to writing
             this.changeRequests.add(new ChangeRequest(socket, ChangeRequest.CHANGEOPS, SelectionKey.OP_WRITE));
 
             synchronized (this.pendingData) {
@@ -69,7 +66,7 @@ public class Server implements Runnable {
         this.selector.wakeup();
     }
 
-    private void write(SelectionKey key) throws IOException {
+    private void write(SelectionKey key) throws Exception {
         //get the channel associated with this key
         SocketChannel socketChannel = (SocketChannel) key.channel();
 
@@ -127,6 +124,7 @@ public class Server implements Runnable {
 
         byte[] copy = new byte[read];
         System.arraycopy(this.readBuffer.array(), 0, copy, 0, read);
+
         //send the read data to the managerWorker for processing
         this.managerWorker.addEvent(new ServerDataEvent(this, sChannel, copy, true));
     }
@@ -140,7 +138,11 @@ public class Server implements Runnable {
                         switch (changeRequest.type) {
                             case ChangeRequest.CHANGEOPS:
                                 SelectionKey key = changeRequest.socket.keyFor(this.selector);
-                                key.interestOps(changeRequest.ops);
+                                try {
+                                    key.interestOps(changeRequest.ops);
+                                } catch (Exception e) {
+                                    continue;
+                                }
                                 break;
                         }
                     }
@@ -170,7 +172,7 @@ public class Server implements Runnable {
                 }
                 //prevent selecting thread from reprocessing old keys
                 this.selector.selectedKeys().clear();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
@@ -185,6 +187,7 @@ public class Server implements Runnable {
             //tell the managerWorker to manage a counter worker
             managerWorker.addWorker(new CounterWorker());
             managerWorker.addWorker(new ConcurrentLockedQueueWorker());
+            managerWorker.addWorker(new ConcurrentCASQueueWorker());
 
             //run the managerWorker on a new thread
             new Thread(managerWorker).start();

@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CounterWorker extends AbstractWorker {
 
     private AtomicInteger counter = new AtomicInteger(0);
-    private static final int NUM_THREADS = 2;
+    private static final int NUM_THREADS = 5;
 
     public CounterWorker() {
         super("count", NUM_THREADS);
