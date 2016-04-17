@@ -10,7 +10,7 @@ import java.util.*;
 
 /**
  * Created by john on 3/11/2016.
- * A nonblocking concurrent asynchronous nio server
+ * A concurrent nio server
  */
 public class Server implements Runnable {
 

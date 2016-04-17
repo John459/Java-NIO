@@ -16,7 +16,7 @@ import java.util.*;
 
 /**
  * Created by john on 3/11/2016.
- * A nonblocking concurrent asynchronous java nio client
+ * A concurrent nio client
  */
 public class Client implements Runnable {
 
